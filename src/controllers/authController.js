@@ -1,34 +1,40 @@
-// src/controllers/authController.js
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const User = require('../src/models/User');
+const User = require('../models/User'); // Ruta corregida si no está en src/models
 
+// Registro (ya lo tienes, solo falta el hash)
 exports.register = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Validación básica
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email y contraseña son obligatorios" });
-    }
 
-    // Crea el usuario
-    const user = new User({ email, password });
+    if (!email || !password) return res.status(400).json({ error: "Email y contraseña son obligatorios" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email, password: hashedPassword });
     await user.save();
 
-    // Genera el token JWT (¡agrega esto!)
-    const token = jwt.sign(
-      { id: user._id },               // Payload (datos del usuario)
-      process.env.JWT_SECRET,         // Clave secreta (defínela en .env)
-      { expiresIn: '1h' }            // Tiempo de expiración
-    );
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    // Respuesta con token (modifica esto)
-    res.status(201).json({
-      success: true,
-      message: "Usuario registrado",
-      token: token  // ¡Ahora el token viene en la respuesta!
-    });
+    res.status(201).json({ success: true, message: "Usuario registrado", token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
+// Login
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: "Contraseña incorrecta" });
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({ success: true, message: "Inicio de sesión exitoso", token });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
